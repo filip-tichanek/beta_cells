@@ -1,0 +1,5298 @@
+---
+title: "Cell cycle dynamics of mRNA induced β-cell proliferation"
+subtitle: "Statistical report"
+format: 
+  html:  
+    embed-resources: true
+    keep-md: false
+    toc: true
+    toc-expand: 3
+    toc-depth: 4
+    toc-location: left
+    number-sections: true
+    number-depth: 4
+    code-fold: true
+    code-tools: true
+    code-summary: "Open code"
+    grid: 
+      body-width: 1000px
+      sidebar-width: 600px
+      margin-width: 100px
+editor: source
+theme: darkly
+highlight-style: github-dark
+fontsize: 12 px
+code-block-bg: "#2D2D31"
+bibliography: ../references.bib
+fontcolor: "#D1D1D1"
+monobackgroundcolor: "#3B3B3B"
+---
+
+------------------------------------------------------------------------
+
+```{r setup, echo=FALSE}
+path = "/home/ticf/1_ticf_sec/709_Bittenglova_BITC_cell_cycle/"
+
+knitr::opts_chunk$set(collapse = TRUE)
+knitr::opts_knit$set(
+  root.dir = path
+  )
+```
+
+```{css, echo=FALSE}
+code.sourceCode {
+  font-size: 0.86em;
+  border: 1px solid #ffffff; 
+  padding: 9px; 
+}
+
+code{
+    color: #EEE8AA; 
+    background: #96464D
+}
+
+.equation {
+  text-align: center;
+  display: block;
+  margin: auto;
+}
+
+body {
+  text-align: justify;
+}
+```
+
+
+{{< include ../README.md >}}
+
+*Note: You must click on **"Open code"** in the HTML report to expand the given code chunks and view the underlying R scripts.*
+
+# Initiation 
+
+Upload initiation file
+
+```{r}
+setwd(path)
+source('r/initiation.R')
+```
+
+Graphical setting
+
+```{r}
+ax_text1 <- 13.4
+tit_text1 <- 14.1
+mar1 <- 0
+mar1b <- -4.5
+mar1b2 <- -0.5
+mar1b3 <- -6.5
+mar1c <- 10
+mar1d <- 2
+
+## text size plot type 2
+ax_text2 <- 12.5
+tit_text2 <- 14
+mar2 <- 0
+
+## text size plot type 3
+ax_text3 <- 13.8
+tit_text3 <- 14.3
+mar3 <- 8
+
+## text size plot type 4
+ax_text4 <- 13.4
+tit_text4 <- 14.1
+mar4 <- 0
+leg_text4 <- 13.8
+
+## others
+mar_add <- 13.4
+
+figh1 <- 3.490; figw1 <- 3.550 # cell type 1 -- main plots
+figh2 <- 4.492; figw2 <- 3.172 # cell type 2 -- occupation plot
+figh3 <- 3.788; figw3 <- 5.189 # cell type 3 -- wide plots
+figh4 <- 4.322; figw4 <- 3.372 # cell type 4 -- last and long (width) cell occupation plot
+#figw4b <- 4.011 # cell type 4.5 -- long cell occupation plot
+figh5 <- 3.896; figw5 <- 3.978 # cell type 5 --  RO plots
+
+
+```
+
+## Explore data
+
+```{r}
+summary(data)
+summary(data_long)
+```
+
+
+# Functions
+
+## Add stars as indicator of statisticla significance to the plot
+
+```{r}
+add_starm <- function(x1, x2, y, star, scal = 1) {
+  base_height <- y - (1.5 / scal)
+  base_stary <- y
+  byh <- 2.5 / scal
+  byh2 <- 1.5 / scal
+
+  signif <- data.frame(
+    x1 = c(
+      x1, x1, mean(x2), min(x2)
+    ),
+    x2 = c(
+      mean(x2), x1, mean(x2), max(x2)
+    ),
+    y1 = c(
+      base_height, base_height, base_height, base_height - byh
+    ),
+    y2 = c(
+      base_height, base_height - byh, base_height - byh, base_height - byh
+    )
+  )
+
+  stars <- data.frame(
+    sig = star,
+    x = mean(c(x1, mean(x2))),
+    y = base_stary
+  )
+
+  p <-  p +
+    geom_segment(
+      data = signif,
+      aes(x = x1, xend = x2, y = y1, yend = y2),
+      linewidth = 0.12
+    ) +
+    geom_text(
+      data = dplyr::filter(stars, sig != "<sup>n.s.</sup>"),
+      mapping = aes(x, y - byh2, label = sig),
+      size = 7.7
+    ) +
+    ggtext::geom_richtext(
+      data = dplyr::filter(stars, sig == "<sup>n.s.</sup>"),
+      mapping = aes(x, y, label = sig),
+      fill = NA,
+      label.colour = NA,
+      label.size = 0,
+      size = 4.8
+    )
+
+  return(p)
+}
+```
+
+## Create a contrast table
+
+```{r}
+con_tab <- function(model, caption_text) {
+  em <- emmeans::emmeans(
+    model,
+    ~ Time
+  )
+  
+  contrast_raw <- pairs(
+    em
+  )
+  
+  contrast_ci <- summary(
+    contrast_raw,
+    adjust = "bonferroni",
+    infer = c(TRUE, TRUE)
+  )
+  
+  contrast <- contrast_ci %>%
+    dplyr::as_tibble() %>%
+    dplyr::mutate(
+      CI = sprintf(
+        "[%.2f, %.2f]",
+        lower.CL,
+        upper.CL
+      ),
+      stars = dplyr::case_when(
+        p.value < 0.001 ~ "***",
+        p.value < 0.01 ~ "**",
+        p.value < 0.05 ~ "*",
+        .default = "ns"
+      )
+    ) %>%
+    dplyr::mutate(
+      dplyr::across(
+        c(estimate, SE, df, t.ratio),
+        ~ round(.x, 2)
+      )
+    ) %>%
+    dplyr::select(
+      contrast,
+      estimate,
+      CI,
+      SE,
+      df,
+      t.ratio,
+      p.value,
+      stars
+    )
+  return(contrast)
+}
+
+```
+
+# G1 phase FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of G1-phase pRB⁺ β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiment'
+
+data_long %>% filter(grepl('G1_phase_FC', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "G1 pRB⁺ β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ Variances do not seem to differ markedly across timepoints, with a possible exception of a control group. 
+
+## Models
+
+### Choose model
+
+Model comparison using AIC/BIC. Note that models without random effects are included purely for comparison. They are not meant to be used as final models, since we want to include a random effect by design to account for within-experiment dependency. The same applies to all other beta cell populations.
+
+```{r}
+
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(grepl('G1_phase_FC', Table)) %>%
+    na.omit() %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(grepl('G1_phase_FC', Table)) %>%
+    na.omit() %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(grepl('G1_phase_FC', Table)) %>%
+    na.omit() %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(grepl('G1_phase_FC', Table)) %>%
+    na.omit() %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~  Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ The random-intercept model without allowance group-specific variance provided the best fit according to both AIC and BIC and was therefore retained.
+
+### Fit final model
+
+```{r}
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(grepl("G1_phase_FC", Table)) %>%
+    na.omit(),
+  REML = TRUE
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of G1-phase pRB⁺ β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept and time as a categorical predictor. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)."
+)
+```
+
+
+
+### Visualisation
+
+```{r, fig.height=3.49, fig.width=3.55}
+#| fig.cap: 'Proportion of G1-phase pRB⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM. \*\*\*, P < 0.001; \*\*, P < 0.01; \*, P < 0.05(adjusted P-values by Bonferroni correction). Statistical significance was assessed with linear mixed-effects model, including experiment as a random effect and time as a categorical predictor'
+
+
+p <- data_long %>%
+  filter(grepl("G1_phase_FC", Table)) %>%
+  na.omit() %>% 
+  mutate(
+    Time = factor(Time,
+                  levels = unique(Time),   
+                  labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+                  )
+    ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = "mean",
+    geom = "col",
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar",
+               width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100, 20),
+    name = expression("G1 pRB"^"+"~"beta cells (%) FC"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 2.13,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text1),
+    axis.text.y = element_text(size = ax_text1),
+    axis.title.x = element_text(size = tit_text1, margin = margin(t = mar1 + mar_add)),
+    axis.title.y = element_text(size = tit_text1, margin = margin(r = mar1b))
+  )
+
+tr <- 0
+byp <- 14
+start <- 90
+
+p <- add_starm(6, c(1:5), start - tr, '***'); tr <-  tr + byp
+p <- add_starm(5, c(1:4), start - tr, '**'); tr <-  tr + byp
+p <- add_starm(4, c(1:3), start - tr, '***'); tr <-  tr + byp
+p <- add_starm(3, c(1:2), start - tr, '**'); tr <-  tr + byp
+p <- add_starm(1, 2, start - tr, '***'); tr <-  tr + byp
+
+p
+
+
+if (!file.exists("gitignore/figures/fig_01.pdf")) {
+  ggsave("gitignore/figures/fig_01.pdf", 
+         plot = p, width = figw1, height = figh1, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("G1_phase_FC", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of G1-phase pRB⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+# G1 phase IF
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of G1-phase pRB⁺ β cells (% by immunofluorescence) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('G1_phase_IF', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "G1 pRB⁺ β cells (%) IF"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ variances seem unstable
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('G1_phase_IF', Table),
+      !is.na(Proportion)
+    ),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G1_phase_IF', Table),
+      !is.na(Proportion)
+    ),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('G1_phase_IF', Table),
+      !is.na(Proportion)
+    ),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G1_phase_IF', Table),
+      !is.na(Proportion)
+    ),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ The random-intercept model with group-specific variance provided the best fit (both AIC and BIC decreased by at least 10 when group-specific variance was allowed) and was therefore retained
+
+### Fit final model
+
+```{r}
+
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G1_phase_IF', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE,
+  dispformula = ~ 0 + Time
+)
+
+```
+
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of G1-phase pRB⁺ β cells (%; immunofluorescence), obtained from a linear mixed-effects model with experiment as a random intercept, time as a categorical predictor, and allowance for group-specific residual variance. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)."
+)
+```
+
+
+
+### Visualisation
+
+```{r, fig.height=3.49, fig.width=3.55}
+#| fig.cap: 'Proportion of G1-phase pRB⁺ beta cells (% by immunofluorescence) at different time points after IVT mRNA transfection. Bars show means ± SEM. \*\*\*, P < 0.001; \*\*, P < 0.01; \*, P < 0.05(adjusted P-values by Bonferroni correction). Statistical significance was assessed with linear mixed-effects model, including experiment as a random effect, time as a categorical predictor, and allowance for group-specific residual variance'
+
+p <- data_long %>%
+  filter(
+      grepl('G1_phase_IF', Table),
+      !is.na(Proportion) 
+    ) %>% 
+  mutate(
+    Time = factor(Time,
+                  levels = unique(Time),   
+                  labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+                  )
+    ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100, 20),
+    name = expression("G1 pRB"^"+"~"beta cells (%) IF"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 2.13,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text1),
+    axis.text.y = element_text(size = ax_text1),
+    axis.title.x = element_text(size = tit_text1, margin = margin(t = mar1 + mar_add)),
+    axis.title.y = element_text(size = tit_text1, margin = margin(r = mar1b))
+  )
+
+start <- 95
+tr <- 0
+byp <- 13
+
+
+p <- add_starm(6, c(1:5), start - tr, '***'); tr <-  tr + byp
+p <- add_starm(5, c(1:3), start - tr, '***'); tr <-  tr + byp
+
+tr <-  tr + 6
+
+p <- add_starm(4, c(1:3), start - tr, '***'); tr <-  tr + byp
+p <- add_starm(3, c(1:2), start - tr, '***'); tr <-  tr + byp
+p <- add_starm(1, 2, start - tr, '***'); tr <-  tr + byp
+p <- add_starm(4, 5, 71, '<sup>n.s.</sup>'); tr <-  tr + byp
+
+p
+
+if (!file.exists("gitignore/figures/fig_02.pdf")) {
+  ggsave("gitignore/figures/fig_02.pdf", 
+         plot = p, width = figw1, height = figh1, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("G1_phase_IF", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of G1-phase pRB⁺ beta cells (% by immunofluorescence) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# G1 vs G0 Cell cycle occupation by FC
+
+## Create relavant datasets
+
+```{r}
+## to get means
+data_occup <- data_long %>% 
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>% 
+  filter(Table == 'G1_phase_FC_X_Cell_cycle_occupation _X_G1 pRB' |
+           Table == 'Cell_cycle_occupation _X_NA_X_G0 pRB') %>%
+  tidyr::drop_na(Proportion) %>% 
+  rename(
+    Population = `Name.of.population`
+  ) %>% 
+  dplyr::select(Time, Population, Proportion) %>% 
+  pivot_wider(
+    names_from = Population, 
+    values_from = Proportion,
+    values_fn = mean
+  ) %>% 
+  mutate(Other = 100 - `G1 pRB` - `G0 pRB`)
+
+data_occup
+
+## to get SEM
+sem_df <- data_long %>%
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>% 
+  filter(Table %in% c(
+    'Cell_cycle_occupation _X_NA_X_G0 pRB',
+    'G1_phase_FC_X_Cell_cycle_occupation _X_G1 pRB'
+  )) %>%
+  tidyr::drop_na(Proportion) %>%
+  rename(Population = `Name.of.population`) %>%
+  group_by(Time, Population) %>%
+  summarise(sem = sd(Proportion)/sqrt(n()), .groups = "drop") %>%
+  left_join(data_occup, by = "Time") %>%
+  mutate(
+    xmid = ifelse(
+      Population == "G0 pRB",
+      `G0 pRB`,                    
+      `G0 pRB` + `G1 pRB`      
+    )
+  ) %>% 
+  dplyr::mutate(Time = factor(Time, levels = c('0h', '1h', '2h', '4h', '6h', '12h')))
+
+kableExtra::kable(sem_df %>% select(Time, Population, sem))
+```
+
+## Plot
+
+```{r, fig.width=3.172, fig.height=4.492}
+#| fig.cap: 'Proportion of G0 (pRB⁻), G1 (pRB⁺), and other beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM (G0 and G1 only; “Other” plotted as 100% − G0 − G1).'
+
+p <- data_occup %>%
+  tidyr::pivot_longer(
+    cols = c(`G0 pRB`, `G1 pRB`, Other),
+    names_to = 'Phase',
+    values_to = 'Percent'
+  ) %>%
+  dplyr::mutate(
+    Phase = factor(Phase, levels = c('Other', 'G1 pRB', 'G0 pRB'))
+  ) %>%
+  ggplot(
+    aes(
+      y = Time, 
+      x = Percent, 
+      fill = Phase
+    )
+  ) +
+  geom_col(width = 0.7) +
+  scale_fill_manual(
+    values = c(
+      'G0 pRB' = '#91bfdb',
+      'G1 pRB' = 'lightgoldenrod1',
+      'Other' = 'grey70'
+    ),
+    breaks = c('G0 pRB', 'G1 pRB', 'Other'),
+    labels = c(
+      'G0 pRB' = expression('G0 (pRB'^-')'),
+      'G1 pRB' = expression('G1 (pRB'^+')'),
+      'Other'  = 'Other'
+    ),
+    name = NULL
+  ) +
+  labs(
+    x = 'Cell cycle occupation (%)',
+    y = 'Time after IVT mRNA transfection'
+  ) +
+  scale_x_continuous(
+    limits = c(0, 100), 
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  scale_y_discrete(
+  labels = function(x) gsub(
+    "(Ctrl|\\+RO|-RO)\\s*", "\\1\n", x
+    ),
+    breaks = c('0h', '1h', '2h', '4h', '6h', '12h')
+  ) +
+  theme_classic() +
+  theme(
+    axis.line.y = element_line(color = 'black'),
+    axis.line.x = element_line(color = 'black'),
+    legend.position = 'bottom',
+    plot.margin = margin(t = 10, r = 13, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text4),
+    axis.text.y = element_text(size = ax_text4),
+    axis.title.x = element_text(size = tit_text4),
+    axis.title.y = element_text(size = tit_text4),
+    legend.text = element_text(size = leg_text4),    
+    legend.key.size = unit(0.85, "lines")
+  ) +
+  geom_errorbarh(
+    data = sem_df,
+    aes(
+      y = Time,
+      xmin = xmid - sem,
+      xmax = xmid + sem
+    ),
+    height = 0.28,
+    inherit.aes = FALSE,
+    linewidth = 0.4,
+    color = 'black'
+  ) +
+  guides(
+    fill = guide_legend(nrow = 2)
+  )
+
+p
+
+if (!file.exists("gitignore/figures/fig_03.pdf")) {
+  ggsave(
+    "gitignore/figures/fig_03.pdf",
+    plot = p,
+    width = figw2,
+    height = figh2,
+    units = "in"
+  )
+}
+
+```
+
+# S phase FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of S-phase EdU⁺ β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('S_phase_FC', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "S-phase EdU⁺ β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ variances appeared to differ slightly between groups
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('S_phase_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_phase_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('S_phase_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_phase_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ The random-intercept model with group-specific variance provided the best fit according to both AIC and BIC and was therefore retained
+
+### Fit final model
+
+```{r}
+
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_phase_FC', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE,
+  dispformula = ~ 0 + Time
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of S-phase EdU⁺ β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept, time as a categorical predictor, and allowance for group-specific residual variance. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)."
+)
+```
+
+
+
+### Visualisation
+
+```{r, fig.height=3.49, fig.width=3.55}
+#| fig.cap: 'Proportion of S-phase EdU⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM. \*\*\*, P < 0.001; \*\*, P < 0.01; \*, P < 0.05(adjusted P-values by Bonferroni correction). Statistical significance was assessed with linear mixed-effects model, including experiment as a random effect, time as a categorical predictor, and allowance for group-specific residual variance'
+
+scale <- 2
+
+p <- data_long %>%
+  filter(
+      grepl('S_phase_FC', Table),
+      !is.na(Proportion) 
+    ) %>% 
+  mutate(
+    Time = factor(
+      Time,
+      levels = unique(Time),   
+      labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+      )
+    ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = expression("S EdU"^"+"~"beta cells (%) FC"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 2.13,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text1),
+    axis.text.y = element_text(size = ax_text1),
+    axis.title.x = element_text(size = tit_text1, margin = margin(t = mar1)),
+    axis.title.y = element_text(size = tit_text1)
+  )
+
+start <- 95/scale
+tr <- 0
+byp <- 12/scale
+
+p <- add_starm(6, c(1:5), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(5, c(1:3), start - tr, '**', scal = scale); tr <-  tr + byp*0.6
+p <- add_starm(5, 4, start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp*0.5
+p <- add_starm(4, c(1:3), start - tr, '*', scal = scale); tr <-  tr + byp
+p <- add_starm(3, c(1:2), start - tr, '**', scal = scale); tr <-  tr + byp
+p <- add_starm(2, 1, start - tr, '***', scal = scale); tr <-  tr + byp
+
+p
+
+if (!file.exists("gitignore/figures/fig_04.pdf")) {
+  ggsave("gitignore/figures/fig_04.pdf",
+         plot = p, width = figw1, height = figh1, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("S_phase_FC", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of S-phase EdU⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# S CA2 FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of S-phase CA2⁺ β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('S_CA2_FC', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "S CA2⁺ β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ Variances seem to differ slightly between time points
+
+## Models
+
+### Choose model
+
+AIC/BIC 
+
+```{r}
+
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('S_CA2_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_CA2_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('S_CA2_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_CA2_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ Allowing group-specific residual variance does not improve AIC/BIC substantially; group-specific variance will not be therefore allowed for the final model. 
+Although there is a slight issue, distributional assumptions seems violated only slightly and alternative models did not solve this. 
+
+
+### Fit final model
+
+```{r}
+
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_CA2_FC', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE
+)
+```
+
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of S-phase CA2⁺ β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept and time as a categorical predictor. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)"
+)
+```
+
+
+### Visualisation
+
+```{r, fig.height=3.49, fig.width=3.55}
+#| fig.cap: 'Proportion of S-phase CA2⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM. \*\*\*, P < 0.001; \*\*, P < 0.01; \*, P < 0.05(adjusted P-values by Bonferroni correction). Statistical significance was assessed with linear mixed-effects model, including experiment as a random effect and time as a categorical predictor'
+
+scale <- 10/6
+
+p <- data_long %>%
+  filter(
+      grepl('S_CA2_FC', Table),
+      !is.na(Proportion) 
+    ) %>% 
+  mutate(
+    Time = factor(Time,
+                  levels = unique(Time),   
+                  labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+                  )
+    ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = expression("S CA2"^"+"~"beta cells (%) FC"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 2.13,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text1),
+    axis.text.y = element_text(size = ax_text1),
+    axis.title.x = element_text(size = tit_text1, margin = margin(t = mar1)),
+    axis.title.y = element_text(size = tit_text1)
+  )
+
+start <- 95/scale
+tr <- 0
+byp <- 12/scale
+
+p <- add_starm(6, 1, start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp*0.7
+p <- add_starm(6, c(2:5), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(5, c(1:3), start - tr, '***', scal = scale); tr <-  tr + byp*0.6
+p <- add_starm(5, 4, start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp*0.6
+p <- add_starm(4, c(1:3), start - tr, '*', scal = scale); tr <-  tr + byp
+p <- add_starm(3, 1, start - tr, '***', scal = scale); tr <-  tr + byp*0.6
+p <- add_starm(3, 2, start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp*0.6
+p <- add_starm(2, 1, start - tr, '**', scal = scale); tr <-  tr + byp*0.4
+
+p
+
+if (!file.exists("gitignore/figures/fig_05.pdf")) {
+  ggsave("gitignore/figures/fig_05.pdf", plot = p, width = figw1, height = figh1, units = "in")
+  ggsave("gitignore/figures/fig_05.svg", plot = p, width = figw1, height = figh1, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("S_CA2_FC", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of S-phase CA2⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# CA2 Cell cycle occupation by FC
+
+## Create relavant datasets
+
+```{r}
+## to get means
+data_occup <- data_long %>% 
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>% 
+  filter(
+    grepl('Cell_cycle_occupation1', Table)
+  ) %>%
+  tidyr::drop_na(Proportion) %>% 
+  rename(
+    Population = `Name.of.population`
+  ) %>% 
+  dplyr::select(Time, Population, Proportion) %>% 
+  pivot_wider(
+    names_from = Population, 
+    values_from = Proportion,
+    values_fn = mean
+  ) %>% 
+  mutate(Other = 100 - `S CA2 FC` - `G0G1 CA2` - `Late G1 CA2` - `G2M CA2`)
+
+data_occup
+
+## to get SEM
+sem_df <- data_long %>%
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>% 
+  filter(
+    grepl('Cell_cycle_occupation1', Table)
+  ) %>%
+  tidyr::drop_na(Proportion) %>%
+  rename(Population = `Name.of.population`) %>%
+  group_by(Time, Population) %>%
+  summarise(sem = sd(Proportion)/sqrt(n()), .groups = "drop") %>%
+  left_join(data_occup, by = "Time") %>%
+  mutate(
+    xmid = case_when(
+      Population == "G0G1 CA2" ~ `G0G1 CA2`,
+      Population == "Late G1 CA2" ~ `G0G1 CA2` + `Late G1 CA2`,
+      Population == "S CA2 FC" ~ `G0G1 CA2` + `Late G1 CA2` + `S CA2 FC`,
+      Population == "G2M CA2" ~ `G0G1 CA2` + `Late G1 CA2` + 
+        `S CA2 FC` + `G2M CA2`
+  )
+)
+
+kableExtra::kable(sem_df %>% select(Time, Population, sem))
+```
+
+## Plot
+
+```{r, fig.width=3.172, fig.height=4.492}
+#| fig.cap: 'Proportion of beta cells in different cell-cycle phases (% by flow cytometry) at different time points after IVT mRNA transfection: G0G1, Late G1, S, G2M, and Other. Bars show means ± SEM.'
+ 
+
+p <- data_occup %>%
+  tidyr::pivot_longer(
+    cols = c(`G0G1 CA2`, `Late G1 CA2`, `S CA2 FC`, `G2M CA2`, Other),
+    names_to = 'Phase',
+    values_to = 'Percent'
+  ) %>%
+  dplyr::mutate(
+    Phase = factor(
+      Phase,
+      levels = c('Other', 'G2M CA2', 'S CA2 FC', 'Late G1 CA2', 'G0G1 CA2')
+    )
+  ) %>%
+  ggplot(
+    aes(
+      y = Time, 
+      x = Percent, 
+      fill = Phase
+    )
+  ) +
+  geom_col(width = 0.7) +
+  scale_fill_manual(
+    values = c(
+      'G0G1 CA2'     = 'springgreen4',
+      'Late G1 CA2'  = 'slategray1',
+      'S CA2 FC'     = '#EEBBFC',
+      'G2M CA2'      = 'darkorange1',
+      'Other' = 'grey70'
+    ),
+    breaks = c('G0G1 CA2', 'Late G1 CA2', 'S CA2 FC', 'G2M CA2', 'Other'),
+    labels = c(
+      'G0G1 CA2'    = 'G0G1 CA2',
+      'Late G1 CA2' = 'late G1 CA2',
+      'S CA2 FC'    = 'S CA2',
+      'G2M CA2'     = 'G2M CA2',
+      'Other'  = 'Other'
+    ),
+    name = NULL
+  ) +
+  labs(
+    x = 'Cell cycle occupation (%)',
+    y = 'Time after IVT mRNA transfection'
+  ) +
+  scale_x_continuous(
+    limits = c(0, 100), 
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  scale_y_discrete(
+  labels = function(x) gsub(
+    "(Ctrl|\\+RO|-RO)\\s*", "\\1\n", x
+    )
+  ) +
+  theme_classic() +
+  theme(
+    axis.line.y = element_line(color = 'black'),
+    axis.line.x = element_line(color = 'black'),
+    legend.position = 'bottom',
+    plot.margin = margin(t = 1, r = 13, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text4),
+    axis.text.y = element_text(size = ax_text4),
+    axis.title.x = element_text(size = tit_text4),
+    axis.title.y = element_text(size = tit_text4),
+    legend.text = element_text(size = leg_text4),    
+    legend.key.size = unit(0.85, "lines")
+  ) +
+  guides(
+    fill = guide_legend(nrow = 3)
+  ) +
+  geom_errorbarh(
+    data = sem_df,
+    aes(
+      y = Time,
+      xmin = xmid - sem,
+      xmax = xmid + sem
+    ),
+    height = 0.28,
+    inherit.aes = FALSE,
+    linewidth = 0.4,
+    color = 'black'
+  ) +
+  scale_color_manual(
+    guide = 'none'
+  )
+
+p
+
+if (!file.exists("gitignore/figures/fig_06.pdf")) {
+  
+  ggsave(
+    "gitignore/figures/fig_06.pdf",
+    plot = p,
+    width = figw2,
+    height = figh2,
+    units = "in"
+  )
+
+  ggsave(
+    "gitignore/figures/fig_06.svg",
+    plot = p,
+    width = figw2,
+    height = figh2,
+    units = "in"
+  )
+}
+```
+
+
+
+# S phase IF
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of S-phase EdU⁺ β cells (% by immunofluorescence) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('S_phase_IF', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "S EdU⁺ β cells (%) IF"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+$\Rightarrow$ Variances does not seem strongly different across time points, or there is at least not clear trend of increasing the variance around 50%. 
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('S_phase_IF', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_phase_IF', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('S_phase_IF', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_phase_IF', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ Allowance for group-specific residual variance decreased AIC and BIC, but diagnostics of the simpler model did not indicate problems, and the group-specific differences did not follow the typical pattern of variance peaking around 50%. We therefore retained the random-intercept model with a global residual variance.
+
+### Fit final model
+
+```{r}
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_phase_IF', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE
+)
+```
+
+$\Rightarrow$ 
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of S-phase EdU⁺ β cells (%; immunofluorescence), obtained from a linear mixed-effects model with experiment as a random intercept and time as a categorical predictor. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)."
+)
+```
+
+
+### Visualisation
+
+```{r, fig.height=3.49, fig.width=3.55}
+#| fig.cap: 'Proportion of S-phase EdU⁺ beta cells (% by immunofluorescence) at different time points after IVT mRNA transfection. Bars show means ± SEM. \*\*\*, P < 0.001; \*\*, P < 0.01; \*, P < 0.05(adjusted P-values by Bonferroni correction). Statistical significance was assessed with linear mixed-effects model, including experiment as a random effect and time as a categorical predictor'
+
+scale <- 10/6
+
+p <- data_long %>%
+  filter(
+      grepl('S_phase_IF', Table),
+      !is.na(Proportion) 
+    ) %>% 
+  mutate(
+    Time = factor(Time,
+                  levels = unique(Time),   
+                  labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+                  )
+    ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", 
+               width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = expression("S EdU"^"+"~"beta cells (%) IF"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 2.13,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text1),
+    axis.text.y = element_text(size = ax_text1),
+    axis.title.x = element_text(size = tit_text1, margin = margin(t = mar1)),
+    axis.title.y = element_text(size = tit_text1)
+  )
+
+start <- 95/scale
+tr <- 0
+byp <- 12/scale
+
+p <- add_starm(6, 1, start - tr, '<sup>n.s.</sup>', scal = scale); 
+tr <-  tr + byp*0.6
+p <- add_starm(6, c(2:5), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(5, c(1:4), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(4, c(1:3), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(3, c(1:2), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(1, 2, start - tr, '**', scal = scale); tr <-  tr + byp
+
+p
+
+if (!file.exists("gitignore/figures/fig_07.pdf")) {
+  ggsave("gitignore/figures/fig_07.pdf", plot = p, width = figw1, height = figh1, units = "in")
+  ggsave("gitignore/figures/fig_07.svg", plot = p, width = figw1, height = figh1, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("S_phase_IF", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of S-phase EdU⁺ beta cells (% by immunofluorescence) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# S CA2 IF
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of S-phase CA2⁺ β cells (% by immunofluorescence) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('S_CA2_IF', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "S CA2⁺ β cells (%) IF"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+$\Rightarrow$ Variances seems similar across time-points, with possile exception of control
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('S_CA2_IF', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_CA2_IF', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('S_CA2_IF', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_CA2_IF', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ Group-specific variance slightly improved AIC, but diagnostics of the default model show no major issues. We will therefore use the simple random-intercept model. Since this is a borderline situation, results from the model allowing for group-specific residual variance are also shown below for comparison.
+
+### Fit final model
+
+```{r}
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_CA2_IF', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of S-phase CA2⁺ β cells (%; immunofluorescence), obtained from a linear mixed-effects model with experiment as a random intercept and time as a categorical predictor. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)."
+)
+```
+
+#### Look at alternative results, when group-specific sigma was allowed
+
+(click on 'Open Code' to see results)
+
+```{r}
+con_tab(model_RI_difvar)
+```
+
+
+### Visualisation
+
+```{r, fig.height=3.49, fig.width=3.55}
+#| fig.cap: 'Proportion of S-phase CA2⁺ beta cells (% by immunofluorescence) at different time points after IVT mRNA transfection. Bars show means ± SEM. \*\*\*, P < 0.001; \*\*, P < 0.01; \*, P < 0.05(adjusted P-values by Bonferroni correction). Statistical significance was assessed with linear mixed-effects model, including experiment as a random effect and time as a categorical predictor'
+
+scale <- 10/8
+
+p <- data_long %>%
+  filter(
+      grepl('S_CA2_IF', Table),
+      !is.na(Proportion) 
+    ) %>% 
+  mutate(
+    Time = factor(Time,
+                  levels = unique(Time),   
+                  labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+                  )
+    ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = expression("S CA2"^"+"~"beta cells (%) IF"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 2.13,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text1),
+    axis.text.y = element_text(size = ax_text1),
+    axis.title.x = element_text(size = tit_text1, margin = margin(t = mar1)),
+    axis.title.y = element_text(size = tit_text1)
+  )
+
+start <- 95/scale
+tr <- 0
+byp <- 12/scale
+
+
+p <- add_starm(1, 6, start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp*0.7
+p <- add_starm(6, c(2:5), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(5, c(1:4), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(4, c(1:3), start - tr, '*', scal = scale); tr <-  tr + byp
+p <- add_starm(3, c(1:2), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(2, 1, start - tr, '***', scal = scale); tr <-  tr + byp
+
+p
+
+if (!file.exists("gitignore/figures/fig_08.pdf")) {
+  ggsave("gitignore/figures/fig_08.pdf", plot = p, width = figw1, height = figh1, units = "in")
+  ggsave("gitignore/figures/fig_08.svg", plot = p, width = figw1, height = figh1, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("S_CA2_IF", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of S-phase CA2⁺ beta cells (% by immunofluorescence) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# G2M phase FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of G2M-phase EdU⁺ β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('G2M_phase_FC', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "G2M-phase EdU⁺ β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ Variances do not seem to markedly differ acros groups
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('G2M_phase_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G2M_phase_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('G2M_phase_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G2M_phase_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ Only the random-intercept model and the simplest model without random effects converged without issues. Both had comparable AIC and BIC. Will use our default -- random intercept model. 
+
+### Fit final model
+
+```{r}
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G2M_phase_FC', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of G2M-phase EdU⁺ β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept and time as a categorical predictor. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)."
+)
+```
+
+
+
+### Visualisation
+
+```{r, fig.height=3.49, fig.width=3.55}
+#| fig.cap: 'Proportion of G2M-phase EdU⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM. \*\*\*, P < 0.001; \*\*, P < 0.01; \*, P < 0.05(adjusted P-values by Bonferroni correction). Statistical significance was assessed with linear mixed-effects model, including experiment as a random effect and time as a categorical predictor'
+
+scale <- 10/8
+
+p <- data_long %>%
+  filter(
+      grepl('G2M_phase_FC', Table),
+      !is.na(Proportion) 
+    ) %>% 
+  mutate(
+    Time = factor(Time,
+                  levels = unique(Time),   
+                  labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+                  )
+    ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = expression("G2M EdU"^"+"~"beta cells (%) FC"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 2.13,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text1),
+    axis.text.y = element_text(size = ax_text1),
+    axis.title.x = element_text(size = tit_text1, margin = margin(t = mar1)),
+    axis.title.y = element_text(size = tit_text1)
+  )
+
+start <- 95/scale
+tr <- 0
+byp <- 11/scale
+
+p <- add_starm(6, c(1:5), start - tr, '*', scal = scale); tr <-  tr + byp
+p <- add_starm(5, c(1:2), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(4, c(1:2), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(3, c(1:2), start - tr, '***', scal = scale); tr <-  tr + byp*0.4
+p <- add_starm(5, c(3:4), start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp*0.9
+p <- add_starm(4, 3, start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp*0.5
+p <- add_starm(1, 2, start - tr, '**', scal = scale)
+
+p
+
+if (!file.exists("gitignore/figures/fig_09.pdf")) {
+  ggsave("gitignore/figures/fig_09.pdf", plot = p, width = figw1, height = figh1, units = "in")
+  ggsave("gitignore/figures/fig_09.svg", plot = p, width = figw1, height = figh1, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("G2M_phase_FC", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of G2M-phase EdU⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# EdU⁺ Cell cycle occupation by FC (G2M)
+
+## Create relavant datasets
+
+```{r}
+## to get means
+data_occup <- data_long %>% 
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>% 
+  filter(
+    grepl('Cell_cycle_occupation2', Table)
+  ) %>%
+  tidyr::drop_na(Proportion) %>% 
+  rename(
+    Population = `Name.of.population`
+  ) %>% 
+  dplyr::select(Time, Population, Proportion) %>% 
+  pivot_wider(
+    names_from = Population, 
+    values_from = Proportion,
+    values_fn = mean
+  ) %>% 
+  mutate(Other = 100 - `S EdU+` - `G0G1 EdU-` -  `G2M EdU+` - `Divided`)
+
+data_occup
+
+## to get SEM
+sem_df <- data_long %>%
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>% 
+  filter(
+    grepl('Cell_cycle_occupation2', Table)
+  ) %>%
+  tidyr::drop_na(Proportion) %>%
+  rename(Population = `Name.of.population`) %>%
+  group_by(Time, Population) %>%
+  summarise(sem = sd(Proportion)/sqrt(n()), .groups = "drop") %>%
+  left_join(data_occup, by = "Time") %>%
+  mutate(
+    xmid = case_when(
+      Population == "G0G1 EdU-" ~ `G0G1 EdU-`,
+      Population == "S EdU+" ~ `G0G1 EdU-` + `S EdU+`,
+      Population == "G2M EdU+" ~ `G0G1 EdU-` + `S EdU+` + `G2M EdU+`,
+      Population == "Divided" ~ `G0G1 EdU-` + `S EdU+` + `G2M EdU+` + `Divided`,
+  )
+)
+
+kableExtra::kable(sem_df %>% select(Time, Population, sem))
+```
+
+
+## Plot
+
+```{r, fig.width=3.172, fig.height=4.492}
+#| fig.cap: 'Proportion of beta cells in G0G1 EdU⁻, S EdU⁺, G2M EdU⁺, and Divided phases (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM (for individual phases; “Other” calculated as 100% − G0G1 EdU⁻ − S EdU⁺ − G2M EdU⁺ − Divided)'  
+
+
+p <- data_occup %>%
+  tidyr::pivot_longer(
+    cols = c(`G0G1 EdU-`, `S EdU+`, `G2M EdU+`, `Divided`, Other),
+    names_to = 'Phase',
+    values_to = 'Percent'
+  ) %>%
+  dplyr::mutate(
+    Phase = factor(
+      Phase,
+      levels = c('Other', 'Divided', 'G2M EdU+', 'S EdU+', 'G0G1 EdU-')
+    )
+  ) %>%
+  ggplot(
+    aes(
+      y = Time, 
+      x = Percent, 
+      fill = Phase
+    )
+  ) +
+  geom_col(width = 0.7) +
+  scale_fill_manual(
+    values = c(
+      'G0G1 EdU-' = 'springgreen4',
+      'S EdU+' = '#EEBBFC',
+      'G2M EdU+' = 'darkorange1',
+      'Divided' = '#6DF1FC',
+      'Other' = 'grey70'
+    ),
+    breaks = c('G0G1 EdU-', 'S EdU+', 'G2M EdU+', 'Divided', 'Other'),
+    labels = c(
+  'G0G1 EdU-' = expression(G0G1~EdU^"-"),
+  'S EdU+'    = expression(S~EdU^"+"),
+  'G2M EdU+'  = expression(G2M~EdU^"+"),
+  'Divided'   = "Divided",
+  'Other'     = "Other"
+),
+    name = NULL
+  ) +
+  labs(
+    x = 'Cell cycle occupation (%)',
+    y = 'Time after IVT mRNA transfection'
+  ) +
+  scale_x_continuous(
+    limits = c(0, 101), 
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  scale_y_discrete(
+  labels = function(x) gsub(
+    "(Ctrl|\\+RO|-RO)\\s*", "\\1\n", x
+    )
+  ) +
+  theme_classic() +
+  theme(
+    axis.line.y = element_line(color = 'black'),
+    axis.line.x = element_line(color = 'black'),
+    legend.position = 'bottom',
+    plot.margin = margin(t = 1, r = 13, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text4),
+    axis.text.y = element_text(size = ax_text4),
+    axis.title.x = element_text(size = tit_text4),
+    axis.title.y = element_text(size = tit_text4),
+    legend.text = element_text(size = leg_text4),    
+    legend.key.size = unit(0.85, "lines")
+  ) +
+  guides(
+    fill = guide_legend(nrow = 3)
+  ) +
+  geom_errorbarh(
+    data = sem_df,
+    aes(
+      y = Time,
+      xmin = xmid - sem,
+      xmax = xmid + sem
+    ),
+    height = 0.28,
+    inherit.aes = FALSE,
+    linewidth = 0.4,
+    color = 'black'
+  ) +
+  scale_color_manual(
+    guide = 'none'
+  )
+
+p
+
+if (!file.exists("gitignore/figures/fig_10.pdf")) {
+  ggsave("gitignore/figures/fig_10.pdf", plot = p, width = figw2, height = figh2, units = "in")
+  ggsave("gitignore/figures/fig_10.svg", plot = p, width = figw2, height = figh2, units = "in")
+  }
+```
+
+# pHH3⁺ FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of pHH3⁺ β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('pHH3_FC', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "pHH3⁺ β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+$\Rightarrow$ Variances appeared to differ substantially between groups, with a clear trend of increasing variance with the group mean, suggesting heteroscedasticity.
+
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('pHH3_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('pHH3_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('pHH3_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ Time,
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('pHH3_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ AIC and BIC indicated that allowing for group-specific residual variance improved model fit. Although diagnostic plots did not reveal major violations of distributional assumptions under a common variance, the data showed a clear trend of increasing variance with the group mean. Therefore, the random-intercept model with group-specific residual variance was used.
+
+Because this is a borderline situation, results of alternative model (with a constant residual variance) is shown bewlo as well
+
+
+### Fit final model
+
+```{r}
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('pHH3_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = TRUE,
+  dispformula = ~ 0 + Time
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of pHH3⁺ β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept, time as a categorical predictor, and allowance for group-specific residual variance. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)."
+)
+```
+
+#### Alternative model - constant residual variance
+
+(click on 'Open Code' to see results)
+
+```{r}
+con_tab(model_RI)
+```
+
+
+### Visualisation
+
+```{r, fig.height=3.49, fig.width=3.55}
+#| fig.cap: 'Proportion of pHH3⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM. “ns” indicates P > 0.05 (Bonferroni-adjusted), all other pairwise contrasts had Bonferroni-adjusted P < 0.05. Statistical significance was assessed using a linear mixed-effects model with experiment as a random effect, time as a categorical predictor, and allowance for group-specific residual variance. “P” denotes the global P-value for the overall effect of time'
+
+scale <- 20
+
+p <- data_long %>%
+  filter(
+      grepl('pHH3_FC', Table),
+      !is.na(Proportion) 
+    ) %>% 
+  mutate(
+    Time = factor(Time,
+                  levels = unique(Time),   
+                  labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+                  )
+    ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = expression("pHH3"^"+"~"beta cells (%) FC"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 2.13,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text1),
+    axis.text.y = element_text(size = ax_text1),
+    axis.title.x = element_text(size = tit_text1, margin = margin(t = mar1)),
+    axis.title.y = element_text(size = tit_text1, margin = margin(r = mar1c))
+  )
+
+start <- 96/scale
+tr <- 0
+byp <- 12/scale
+
+p <- add_starm(6, c(1:5), start - tr, '*', scal = scale); tr <-  tr + byp
+p <- add_starm(5, c(1:2), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(4, c(1:2), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(3, c(1:2), start - tr, '*', scal = scale); tr <-  tr + byp*0.5
+p <- add_starm(5, c(3:4), start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp*0.8
+p <- add_starm(4, 3, start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp*0.5
+p <- add_starm(1, 2, start - tr, '<sup>n.s.</sup>', scal = scale)
+
+p
+
+if (!file.exists("gitignore/figures/fig_11.pdf")) {
+  ggsave("gitignore/figures/fig_11.pdf", plot = p, width = figw1, height = figh1, units = "in")
+  ggsave("gitignore/figures/fig_11.svg", plot = p, width = figw1, height = figh1, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("pHH3_FC", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of pHH3⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+# Divided FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of divided β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('divided_cells_FC', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "Divided β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+$\Rightarrow$ Variances may slightly increase for later times
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('divided_cells_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('divided_cells_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('divided_cells_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ Time,
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('divided_cells_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ Group-specific residual variance will not markedly improve AIC/BIC or model diagnostics -- default (random-intercept) model will be used.
+Both the QQ-plot and the residuals vs. fitted plot indicate some heteroscedasticity, but it does not seem serious. 
+
+### Fit final model
+
+```{r}
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('divided_cells_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = TRUE
+)
+```
+
+### Results
+
+```{r}
+
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of divided β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept and time as a categorical predictor. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)."
+)
+```
+
+
+
+### Visualisation
+
+```{r, fig.height=3.49, fig.width=3.55}
+#| fig.cap: 'Proportion of divided beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM. Statistical significance was assessed using a linear mixed-effects model with experiment as a random effect and time as a categorical predictor'
+
+scale <- 1.25
+
+p <- data_long %>%
+  filter(
+    grepl('divided_cells_FC', Table),
+    !is.na(Proportion) 
+  ) %>%
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>%
+  mutate(
+    Time = factor(
+      Time,
+      levels = c(sort(unique(Time[Time != "Ctrl 40h"])), "Ctrl 40h")
+    )
+  ) %>%  
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = "Divided beta cells (%) FC",
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 2.13,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text1),
+    axis.text.y = element_text(size = ax_text1),
+    axis.title.x = element_text(size = tit_text1, margin = margin(t = mar1)),
+    axis.title.y = element_text(size = tit_text1, margin = margin(r = 8))
+  )
+
+tr <- 0
+byp <- 12/scale
+start <- 95/scale
+
+p <- add_starm(6, c(1:5), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(5, c(1:4), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(4, c(1:3), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(3, c(1:2), start - tr, '*', scal = scale); tr <-  tr + byp
+p <- add_starm(1, 2, start - tr, '*', scal = scale); tr <-  tr + byp
+
+p
+
+if (!file.exists("gitignore/figures/fig_12.pdf")) {
+  ggsave("gitignore/figures/fig_12.pdf", plot = p, width = figw1, height = figh1, units = "in")
+  ggsave("gitignore/figures/fig_12.svg", plot = p, width = figw1, height = figh1, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("divided_cells_FC", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of divided beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# EdU⁺ Cell cycle occupation by FC (divided)
+
+## Create relavant datasets
+
+```{r}
+## to get means
+data_occup <- data_long %>% 
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>% 
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>% 
+  filter(
+    grepl('Cell_cycle_occupation3', Table)
+  ) %>%
+  tidyr::drop_na(Proportion) %>% 
+  rename(
+    Population = `Name.of.population`
+  ) %>% 
+  dplyr::select(Time, Population, Proportion) %>% 
+  pivot_wider(
+    names_from = Population, 
+    values_from = Proportion,
+    values_fn = mean
+  ) %>% 
+  mutate(Other = 100 - `S EdU+` - `G0G1 EdU-` -  `G2M EdU+` - `Divided`)  
+
+data_occup
+
+## to get SEM
+sem_df <- data_long %>%
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>% 
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>%
+  filter(
+    grepl('Cell_cycle_occupation3', Table)
+  ) %>%
+  tidyr::drop_na(Proportion) %>%
+  rename(Population = `Name.of.population`) %>%
+  group_by(Time, Population) %>%
+  summarise(sem = sd(Proportion)/sqrt(n()), .groups = "drop") %>%
+  left_join(data_occup, by = "Time") %>%
+  dplyr::mutate(
+    xmid = case_when(
+      Population == "G0G1 EdU-" ~ `G0G1 EdU-`,
+      Population == "S EdU+" ~ `G0G1 EdU-` + `S EdU+`,
+      Population == "G2M EdU+" ~ `G0G1 EdU-` + `S EdU+` + `G2M EdU+`,
+      Population == "Divided" ~ `G0G1 EdU-` + `S EdU+` + `G2M EdU+` + `Divided`,
+  )
+)
+
+kableExtra::kable(sem_df %>% select(Time, Population, sem))
+```
+
+## Plot
+
+```{r, fig.width=3.172, fig.height=4.492}
+#| fig.cap: 'Proportion of beta cells in G0G1 EdU⁻, S EdU⁺, G2M EdU⁺, and Divided phases (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM (for individual phases; “Other” calculated as 100% − G0G1 EdU⁻ − S EdU⁺ − G2M EdU⁺ − Divided)'  
+
+
+p <- data_occup %>%
+  tidyr::pivot_longer(
+    cols = c(`G0G1 EdU-`, `S EdU+`, `G2M EdU+`, `Divided`, Other),
+    names_to = 'Phase',
+    values_to = 'Percent'
+  ) %>%
+  dplyr::mutate(
+    Phase = factor(
+      Phase,
+      levels = c('Other', 'Divided', 'G2M EdU+', 'S EdU+', 'G0G1 EdU-')
+    )
+  ) %>%
+  ggplot(
+    aes(
+      y = Time, 
+      x = Percent, 
+      fill = Phase
+    )
+  ) +
+  geom_col(width = 0.7) +
+  scale_fill_manual(
+    values = c(
+      'G0G1 EdU-' = 'springgreen4',
+      'S EdU+' = '#EEBBFC',
+      'G2M EdU+' = 'darkorange1',
+      'Divided' = '#6DF1FC',
+      'Other' = 'grey70'
+    ),
+    breaks = c('G0G1 EdU-', 'S EdU+', 'G2M EdU+', 'Divided', 'Other'),
+    labels = c(
+    expression(G0G1~EdU^"-"),
+    expression(S~EdU^"+"),
+    expression(G2M~EdU^"+"),
+    "Divided",
+    "Other"
+  ), name = NULL
+  ) +
+  labs(
+    x = 'Cell cycle occupation (%)',
+    y = 'Time after IVT mRNA transfection'
+  ) +
+  scale_x_continuous(
+    limits = c(0, 101), 
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  scale_y_discrete(
+  labels = function(x) gsub(
+    "(Ctrl|\\+RO|-RO)\\s*", "\\1\n", x
+    )
+  ) +
+  theme_classic() +
+  theme(
+    axis.line.y = element_line(color = 'black'),
+    axis.line.x = element_line(color = 'black'),
+    legend.position = 'bottom',
+    plot.margin = margin(t = 1, r = 13, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text4),
+    axis.text.y = element_text(size = ax_text4),
+    axis.title.x = element_text(size = tit_text4),
+    axis.title.y = element_text(size = tit_text4),
+    legend.text = element_text(size = leg_text4),    
+    legend.key.size = unit(0.85, "lines")
+  ) +
+  guides(
+    fill = guide_legend(nrow = 3)
+  ) +
+  geom_errorbarh(
+    data = sem_df,
+    aes(
+      y = Time,
+      xmin = xmid - sem,
+      xmax = xmid + sem
+    ),
+    height = 0.28,
+    inherit.aes = FALSE,
+    linewidth = 0.4,
+    color = 'black'
+  ) +
+  scale_color_manual(
+    guide = 'none'
+  )
+
+p
+
+if (!file.exists("gitignore/figures/fig_13.pdf")) {
+  ggsave("gitignore/figures/fig_13.pdf", plot = p, width = figw2, height = figh2, units = "in")
+  ggsave("gitignore/figures/fig_13.svg", plot = p, width = figw2, height = figh2, units = "in")
+  }
+```
+
+# G0G1 phase FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of G0G1-phase EdU⁻ β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('G0G1_CYCLE_FC', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "G0G1-phase EdU⁻ β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ Variances sharply increases around 50% proportion. Clear Heteroscedasticity 
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('G0G1_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G0G1_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('G0G1_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G0G1_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time,
+  control = glmmTMB::glmmTMBControl(
+  optCtrl = list(
+    iter.max = 1e6,
+    eval.max = 1e6
+  )
+)
+)
+
+```
+
+Because the ML fit of the random-intercept model with group-specific residual variance showed convergence problems, the two random-intercept models will be refitted using REML and compared only using residual diagnostics if the convergence issue will be resolved with REML.
+
+```{r}
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G0G1_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = TRUE
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G0G1_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = TRUE,
+  dispformula = ~ 0 + Time
+)
+```
+
+$\Rightarrow$ Both random-intercept models re-fitted with REML, are without any convergence issue.
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ Addition group-specific residual variance substantially improved diagnostics. We will use random-intercept model with allowance of the group-specific residual variance.
+
+### Fit final model
+
+```{r}
+
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G0G1_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE,
+  dispformula = ~ 0 + Time
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of G0G1-phase EdU⁻ β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept, time as a categorical predictor, and allowance for group-specific residual variance. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)"
+)
+```
+
+
+
+### Visualisation
+
+```{r, fig.height=3.788, fig.width=5.189}
+#| fig.cap: 'Proportion of G0G1-phase EdU⁻ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM'
+
+scale <- 1
+
+p <- data_long %>%
+  filter(
+    grepl("G0G1_CYCLE_FC", Table),
+    !is.na(Proportion)
+  ) %>%
+  mutate(
+    Time = factor(
+      Time,
+      levels = unique(Time),
+      labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+    ),
+    Time = stringr::str_trim(Time)
+  ) %>%
+  mutate(
+    Time = forcats::fct_relevel(Time, "Ctrl 24h", "Ctrl 70h", after = Inf)
+  ) %>%
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = "mean",
+    geom = "col",
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = "G0G1 beta cells (%) FC",
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale), clip = "off") +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 1.01,
+    fill = 'grey64',
+    size = 1.97,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5.5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text2),
+    axis.text.y = element_text(size = ax_text2),
+    axis.title.x = element_text(
+      size = tit_text2,
+      margin = margin(t = mar2)
+      ),
+    axis.title.y = element_text(size = tit_text2, margin = margin(r = 0.4))
+  )
+
+
+p
+
+if (!file.exists("gitignore/figures/fig_14.pdf")) {
+  ggsave("gitignore/figures/fig_14.pdf", plot = p, width = figw3, height = figh3, units = "in")
+  ggsave("gitignore/figures/fig_14.svg", plot = p, width = figw3, height = figh3, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("G0G1_CYCLE_FC", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of G0G1-phase EdU⁻ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# S cycle FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of S-phase EdU⁺ β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(
+  grepl('S_CYCLE_FC_X_Cell_cycle_occupation4_X_S Ed', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "S EdU⁺ β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ Variances sharply increase as going toward 50% proportion, clear heteroscedasticity
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('S_CYCLE_FC_X_Cell_cycle_occupation4_X_S Ed', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_CYCLE_FC_X_Cell_cycle_occupation4_X_S Ed', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('S_CYCLE_FC_X_Cell_cycle_occupation4_X_S Ed', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_CYCLE_FC_X_Cell_cycle_occupation4_X_S Ed', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ The random-intercept model with group-specific variance provided the best fit according to both AIC and BIC, and sharply improved model diagnostics, and was therefore retained
+
+### Fit final model
+
+```{r}
+
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('S_CYCLE_FC_X_Cell_cycle_occupation4_X_S Ed', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE,
+  dispformula = ~ 0 + Time
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of S-phase EdU⁺ β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept, time as a categorical predictor, and allowance for group-specific residual variance. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)"
+)
+```
+
+### Visualisation
+
+```{r, fig.height=3.788, fig.width=5.189}
+#| fig.cap: 'Proportion of S-phase EdU⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM'
+
+scale <- 10/4
+  
+p <- data_long %>%
+  filter(
+      grepl('S_CYCLE_FC_X_Cell_cycle_occupation4_X_S Ed', Table),
+      !is.na(Proportion) 
+    ) %>% 
+  mutate(
+    Time = factor(
+      Time,
+      levels = unique(Time),
+      labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+    ),
+    Time = stringr::str_trim(Time)
+  ) %>%
+  mutate(
+    Time = forcats::fct_relevel(Time, "Ctrl 24h", "Ctrl 70h", after = Inf)
+  ) %>%
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = expression("S EdU"^"+"~"beta cells (%) FC"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 1.01,
+    fill = 'grey64',
+    size = 1.97,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5.5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text2),
+    axis.text.y = element_text(size = ax_text2),
+    axis.title.x = element_text(
+      size = tit_text2,
+      margin = margin(t = mar2)
+      ),
+    axis.title.y = element_text(size = tit_text2)
+  )
+
+p
+
+if (!file.exists("gitignore/figures/fig_15.pdf")) {
+  ggsave("gitignore/figures/fig_15.pdf", plot = p, width = figw3, height = figh3, units = "in")
+  ggsave("gitignore/figures/fig_15.svg", plot = p, width = figw3, height = figh3, units = "in")
+  }
+
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("S_CYCLE_FC_X_Cell_cycle_occupation4_X_S Ed", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of S-phase EdU⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# G2M cycle FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of G2M-phase EdU⁺ β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('G2M_CYCLE_FC', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "G2M-phase EdU⁺ β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ Variances sharply increase as going toward 50% proportion, clear heteroscedasticity
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('G2M_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G2M_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('G2M_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G2M_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ The random-intercept model with group-specific variance provided the best fit according to both AIC and BIC, and sharply improved model diagnostics, and was therefore retained
+
+### Fit final model
+
+```{r}
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('G2M_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE,
+  dispformula = ~ 0 + Time
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of G2M-phase EdU⁺ β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept, time as a categorical predictor, and allowance for group-specific residual variance. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)"
+)
+```
+
+### Visualisation
+
+```{r, fig.height=3.788, fig.width=5.189}
+#| fig.cap: 'Proportion of G2M-phase EdU⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM'
+
+scale <- 2.5
+  
+p <- data_long %>%
+  filter(
+      grepl('G2M_CYCLE_FC', Table),
+      !is.na(Proportion) 
+    ) %>% 
+  mutate(
+    Time = factor(
+      Time,
+      levels = unique(Time),
+      labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+    ),
+    Time = stringr::str_trim(Time)
+  ) %>%
+  mutate(
+    Time = forcats::fct_relevel(Time, "Ctrl 24h", "Ctrl 70h", after = Inf)
+  ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = expression("G2M EdU"^"+"~"beta cells (%) FC"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 1.01,
+    fill = 'grey64',
+    size = 1.97,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5.5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text2),
+    axis.text.y = element_text(size = ax_text2),
+    axis.title.x = element_text(
+      size = tit_text2,
+      margin = margin(t = mar2)
+      ),
+    axis.title.y = element_text(size = tit_text2)
+  )
+
+p
+
+if (!file.exists("gitignore/figures/fig_16.pdf")) {
+  ggsave("gitignore/figures/fig_16.pdf", plot = p, width = figw3, height = figh3, units = "in")
+  }
+
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("G2M_CYCLE_FC", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of G2M-phase EdU⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# Divided cycle FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of divided β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('DIVIDED_CYCLE_FC', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "Divided β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+$\Rightarrow$ Variances sharply increase as the proportion goes upward; there is a clear sign of serious heteroscedasticity
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('DIVIDED_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('DIVIDED_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('DIVIDED_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time,
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('DIVIDED_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ The random-intercept model with group-specific variance provided the best fit according to both AIC and BIC, and sharply improved model diagnostics, and was therefore retained.
+
+### Fit final model
+
+```{r}
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('DIVIDED_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = TRUE,
+  dispformula = ~ 0 + Time
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of divided β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept, time as a categorical predictor and with allowance of group-specific residual variance. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)"
+)
+```
+
+
+### Visualisation
+
+```{r, fig.height=3.788, fig.width=5.189}
+#| fig.cap: 'Proportion of divided beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM'
+
+scale <- 1
+
+p <- data_long %>%
+  filter(
+      grepl('DIVIDED_CYCLE_FC', Table),
+      !is.na(Proportion) 
+    ) %>% 
+  mutate(
+    Time = factor(
+      Time,
+      levels = unique(Time),
+      labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+    ),
+    Time = stringr::str_trim(Time)
+  ) %>%
+  mutate(
+    Time = forcats::fct_relevel(Time, "Ctrl 24h", "Ctrl 70h", after = Inf)
+  ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = "Divided beta cells (%) FC",
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 1.01,
+    fill = 'grey64',
+    size = 1.97,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5.5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text2),
+    axis.text.y = element_text(size = ax_text2),
+    axis.title.x = element_text(
+      size = tit_text2,
+      margin = margin(t = mar2)
+      ),
+    axis.title.y = element_text(size = tit_text2, margin = margin(r = 0.4))
+  )
+
+p
+
+if (!file.exists("gitignore/figures/fig_17.pdf")) {
+  ggsave("gitignore/figures/fig_17.pdf", plot = p, width = figw3, height = figh3, units = "in")
+  ggsave("gitignore/figures/fig_17.svg", plot = p, width = figw3, height = figh3, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("DIVIDED_CYCLE_FC", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of divided beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# 2nd S cycle FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of 2nd S-phase β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('2ND_S_CYCLE_FC', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "2nd S-phase β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ Variances sharply vary, clear heteroscedasticity
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('2ND_S_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('2ND_S_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('2ND_S_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('2ND_S_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI,  model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI,  model_RI_difvar))
+```
+
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ The random-intercept model with group-specific variance provided the best fit according to both AIC and BIC, and sharply improved model diagnostics although some assumptions violation remains. Random-intercept model with allowance of group-specific residual variance will be retained.
+
+AIC and BIC for model without random intercept but allowing group-specific variance did not converge and is not thus presented. 
+
+### Fit final model
+
+```{r}
+
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('2ND_S_CYCLE_FC', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE,
+  dispformula = ~ 0 + Time
+)
+
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of 2nd S-phase β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept, time as a categorical predictor, and allowance for group-specific residual variance. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)"
+)
+```
+
+
+
+### Visualisation
+
+```{r, fig.height=3.788, fig.width=5.189}
+#| fig.cap: 'Proportion of 2nd S-phase beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM'
+
+scale <- 10
+  
+p <- data_long %>%
+  filter(
+      grepl('2ND_S_CYCLE_FC', Table),
+      !is.na(Proportion) 
+    ) %>% 
+  mutate(
+    Time = factor(
+      Time,
+      levels = unique(Time),
+      labels = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", unique(Time)))
+    ),
+    Time = stringr::str_trim(Time)
+  ) %>%
+  mutate(
+    Time = forcats::fct_relevel(Time, "Ctrl 24h", "Ctrl 70h", after = Inf)
+  ) %>%
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = "2nd S beta cells (%) FC",
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale)) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+    labels = function(x) gsub("Ctrl (.*)", "Ctrl\n\\1", x)) +
+  geom_beeswarm(
+    cex = 1.01,
+    fill = 'grey64',
+    size = 1.97,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 5.5, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text2),
+    axis.text.y = element_text(size = ax_text2),
+    axis.title.x = element_text(
+      size = tit_text2,
+      margin = margin(t = mar2)
+      ),
+    axis.title.y = element_text(size = tit_text2, margin = margin(r = 7.4))
+  )
+
+p
+
+if (!file.exists("gitignore/figures/fig_18.pdf")) {
+  ggsave("gitignore/figures/fig_18.pdf", plot = p, width = figw3, height = figh3, units = "in")
+  ggsave("gitignore/figures/fig_18.svg", plot = p, width = figw3, height = figh3, units = "in")
+  }
+
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("2ND_S_CYCLE_FC", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of 2nd S-phase beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+# Cell cycle occupation long
+
+## Create relavant datasets
+
+```{r}
+## to get means
+data_occup <- data_long %>% 
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>%
+   mutate(
+    Time = gsub("24h ", "24h", Time)
+  ) %>%
+  filter(
+    grepl('Cell_cycle_occupation4', Table)
+  ) %>%
+  tidyr::drop_na(Proportion) %>% 
+  rename(
+    Population = `Name.of.population`
+  ) %>% 
+  dplyr::select(Time, Population, Proportion) %>% 
+  pivot_wider(
+    names_from = Population, 
+    values_from = Proportion,
+    values_fn = mean
+  ) %>% 
+  mutate(Other = 100 - `S EdU+` - `G0G1 EdU-` -  `G2M EdU+` - `DIVIDED` - `2ND S`) %>% 
+  mutate(Other = if_else(Other < 0, 0, Other)) 
+
+data_occup
+
+## to get SEM
+sem_df <- data_long %>%
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>% 
+  mutate(
+    Time = gsub("24h ", "24h", Time)
+  ) %>%
+  filter(
+    grepl('Cell_cycle_occupation4', Table)
+  ) %>%
+  tidyr::drop_na(Proportion) %>%
+  rename(Population = `Name.of.population`) %>%
+  group_by(Time, Population) %>%
+  summarise(sem = sd(Proportion)/sqrt(n()), .groups = "drop") %>%
+  left_join(data_occup, by = "Time") %>%
+  mutate(
+    xmid = case_when(
+      Population == "G0G1 EdU-" ~ `G0G1 EdU-`,
+      Population == "S EdU+" ~ `G0G1 EdU-` + `S EdU+`,
+      Population == "G2M EdU+" ~ `G0G1 EdU-` + `S EdU+` + `G2M EdU+`,
+      Population == "DIVIDED" ~ `G0G1 EdU-` + `S EdU+` + `G2M EdU+` + `DIVIDED`,
+      Population == "2ND S" ~ `G0G1 EdU-` + `S EdU+` + `G2M EdU+` + `DIVIDED` + 
+        `2ND S`
+  )
+)
+
+kableExtra::kable(sem_df %>% select(Time, Population, sem))
+```
+
+## Plot
+
+```{r, fig.width=4.012, fig.height=7.02}
+#| fig.cap: 'Proportion of beta cells in G0G1 EdU⁻, S EdU⁺, G2M EdU⁺, Divided and 2nd S phase (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM (for individual phases; “Other” calculated as 100% − G0G1 EdU⁻ − S EdU⁺ − G2M EdU⁺ − Divided − 2nd S)'  
+
+
+p <- data_occup %>%
+  tidyr::pivot_longer(
+    cols = c(`G0G1 EdU-`, `S EdU+`, `G2M EdU+`, `DIVIDED`, `2ND S`, Other),
+    names_to = "Phase",
+    values_to = "Percent"
+  ) %>%
+  dplyr::mutate(
+    Phase = factor(
+      Phase,
+      levels = c("Other", "2ND S", "DIVIDED", "G2M EdU+", "S EdU+", "G0G1 EdU-")
+    )
+  ) %>%
+  dplyr::mutate(
+    Percent = if_else(Percent < 0, 0, Percent)
+  ) %>%
+   dplyr::mutate(Time = factor(
+    Time,
+    levels = c(
+      "0h",
+      "12h",
+      "14h",
+      "18h",
+      "20h",
+      "24h",
+      "32h",
+      "40h",
+      "50h",
+      "70h",
+      "Ctrl 24h",
+      "Ctrl 70h"
+    )
+  )) %>% 
+  ggplot(
+    aes(
+      y = Time,
+      x = Percent,
+      fill = Phase
+    )
+  ) +
+  geom_col(width = 0.7) +
+  scale_fill_manual(
+    values = c(
+      "G0G1 EdU-" = "springgreen4",
+      "S EdU+" = "#EEBBFC",
+      "G2M EdU+" = "darkorange1",
+      "DIVIDED" = "#6DF1FC",
+      "2ND S" = "gold2",
+      "Other" = "grey70"
+    ),
+    breaks = c("G0G1 EdU-", "S EdU+", "G2M EdU+", "DIVIDED", "2ND S", "Other"),
+    labels = c(
+  "G0G1 EdU-" = expression(G0G1~EdU^"-"),
+  "S EdU+"    = expression(S~EdU^"+"),
+  "G2M EdU+"  = expression(G2M~EdU^"+"),
+  "DIVIDED"   = "Divided",
+  "2ND S"     = "2nd S",
+  "Other"     = "Other"
+),
+    name = NULL
+  ) +
+  labs(
+    x = "Cell cycle occupation (%)",
+    y = "Time after IVT mRNA transfection"
+  ) +
+  scale_x_continuous(
+    limits = c(0, 105),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  #coord_cartesian(xlim = c(0, 105), clip = "off") +
+  scale_y_discrete(
+    labels = function(x) {
+      gsub(
+        "(Ctrl|\\+RO|-RO)\\s*", "\\1\n", x
+      )
+    }
+  ) +
+  theme_classic() +
+  theme(
+    axis.line.y = element_line(color = "black"),
+    axis.line.x = element_line(color = "black"),
+    legend.position = "bottom",
+    plot.margin = margin(t = 1, r = 5, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text4),
+    axis.text.y = element_text(size = ax_text4),
+    axis.title.x = element_text(size = tit_text4),
+    axis.title.y = element_text(size = tit_text4),
+    legend.text = element_text(size = leg_text4),
+    legend.key.size = unit(0.85, "lines")
+  ) +
+  guides(
+    fill = guide_legend(nrow = 3)
+  ) +
+  geom_errorbarh(
+    data = sem_df,
+    aes(
+      y = Time,
+      xmin = xmid - sem,
+      xmax = xmid + sem
+    ),
+    height = 0.28,
+    inherit.aes = FALSE,
+    linewidth = 0.4,
+    color = "black"
+  ) +
+  scale_color_manual(
+    guide = "none"
+  )
+
+p
+
+if (!file.exists("gitignore/figures/fig_24.pdf")) {
+  ggsave(
+    "gitignore/figures/fig_24.pdf",
+    plot = p,
+    width = figw4,
+    height = 7.02,
+    units = "in"
+  )
+}
+```
+
+
+# RO G0G1 FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of G0G1-phase EdU⁻ β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('RO_G0G1', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "G0G1 EdU⁻ β  cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ variances appeared to differ slightly between groups
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('RO_G0G1', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('RO_G0G1', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('RO_G0G1', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('RO_G0G1', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ The random-intercept model provide the best fit. No reason to allow group-specific residual variance
+
+### Fit final model
+
+```{r}
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('RO_G0G1', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of G0G1-phase EdU⁻ β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept and time as a categorical predictor. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)"
+)
+```
+
+
+
+### Visualisation
+
+```{r, fig.height=3.896, fig.width=3.978}
+#| fig.cap: 'Proportion of G0G1-phase EdU⁻ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM. \*\*\*, P < 0.001; \*\*, P < 0.01; \*, P < 0.05(adjusted P-values by Bonferroni correction). Statistical significance was assessed with linear mixed-effects model, including experiment as a random effect and time as a categorical predictor'
+
+scale <- 10/8
+
+p <- data_long %>%
+  filter(grepl("RO_G0G1", Table), !is.na(Proportion)) %>%
+  mutate(
+    Time = gsub("Control", "Ctrl", Time),
+    Time = gsub(" hour[s]?", "h", Time),
+    Time = gsub("min", "m", Time),
+    #Time = gsub(" ", "", Time),
+    Time = fct_inorder(Time)
+  ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = expression("G0G1 EdU"^"-"~"beta cells (%) FC"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale), clip = "off") +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+  labels = function(x) gsub(
+    "(Ctrl|\\+RO|-RO)\\s*", "\\1\n", x
+  )
+) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 1.92,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 40, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text3),
+    axis.text.y = element_text(size = ax_text3),
+    axis.title.x = element_text(size = tit_text3, margin = margin(t = mar3)),
+    axis.title.y = element_text(size = tit_text3, margin = margin(r = 3))
+  )
+
+start <- 115/scale
+tr <- 0
+byp <- 12/scale
+
+p <- add_starm(6, c(1:4), start - tr, '**', scal = scale); tr <-  tr + byp
+p <- add_starm(5, c(1:4), start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp
+p <- add_starm(4, c(1:3), start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp
+p <- add_starm(3, c(1:2), start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp
+p <- add_starm(5, 6, start - tr, '<sup>n.s.</sup>', scal = scale)
+p <- add_starm(1, 2, start - tr, '<sup>n.s.</sup>', scal = scale)
+
+p
+
+if (!file.exists("gitignore/figures/fig_19.pdf")) {
+  ggsave("gitignore/figures/fig_19.pdf", plot = p, width = figw5, height = figh5, units = "in")
+  ggsave("gitignore/figures/fig_19.svg", plot = p, width = figw5, height = figh5, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("RO_G0G1", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of G0G1-phase EdU⁻ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# RO_S_EdU FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of S-phase EdU⁺ β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('RO_S', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "S-phase EdU⁺ β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ variances appeared to differ slightly between groups
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('RO_S', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('RO_S', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('RO_S', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('RO_S', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ The random-intercept model provide the best fit. No reason to allow group-specific residual variance
+
+### Fit final model
+
+```{r}
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('RO_S', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of S-phase EdU⁺ β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept and time as a categorical predictor. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)"
+)
+```
+
+
+
+### Visualisation
+
+```{r, fig.height=3.896, fig.width=3.978}
+#| fig.cap: 'Proportion of S-phase EdU⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM. \*\*\*, P < 0.001; \*\*, P < 0.01; \*, P < 0.05(adjusted P-values by Bonferroni correction). Statistical significance was assessed with linear mixed-effects model, including experiment as a random effect and time as a categorical predictor'
+
+scale <- 10/4
+
+p <- data_long %>%
+  filter(grepl("RO_S", Table), !is.na(Proportion)) %>%
+  mutate(
+    Time = gsub("Control", "Ctrl", Time),
+    Time = gsub(" hour[s]?", "h", Time),
+    Time = gsub("min", "m", Time),
+    #Time = gsub(" ", "", Time),
+    Time = fct_inorder(Time)
+  ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = expression("S EdU"^"+"~"beta cells (%) FC"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale), clip = "off") +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+  labels = function(x) gsub(
+    "(Ctrl|\\+RO|-RO)\\s*", "\\1\n", x
+  )
+) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 1.92,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 40, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text3),
+    axis.text.y = element_text(size = ax_text3),
+    axis.title.x = element_text(size = tit_text3, margin = margin(t = mar3)),
+    axis.title.y = element_text(size = tit_text3, margin = margin(r = 1))
+  )
+
+start <- 115/scale
+tr <- 0
+byp <- 10/scale
+
+p <- add_starm(6, c(1:4), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(5, c(1:2), start - tr, '*', scal = scale); tr <-  tr + byp
+p <- add_starm(5, c(3:4), start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp
+p <- add_starm(4, c(1:3), start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp
+p <- add_starm(3, c(1:2), start - tr, '<sup>n.s.</sup>', scal = scale)
+p <- add_starm(5, 6, start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp
+p <- add_starm(1, 2, start - tr, '<sup>n.s.</sup>', scal = scale)
+
+p
+
+
+if (!file.exists("gitignore/figures/fig_20.pdf")) {
+  ggsave("gitignore/figures/fig_20.pdf", plot = p, width = figw5, height = figh5, units = "in")
+  ggsave("gitignore/figures/fig_20.svg", plot = p, width = figw5, height = figh5, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("RO_S", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of S-phase EdU⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+
+# RO G2M FC
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of G2M-phase EdU⁺ β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('RO_G2M', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "G2M-phase EdU⁺ β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ variances appeared to differ slightly between groups
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('RO_G2M', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('RO_G2M', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('RO_G2M', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('RO_G2M', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ The random-intercept model provide the best fit. No reason to allow group-specific residual variance
+
+### Fit final model
+
+```{r}
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('RO_G2M', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of G2M-phase EdU⁺ β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept and time as a categorical predictor. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)"
+)
+```
+
+
+
+### Visualisation
+
+```{r, fig.height=3.896, fig.width=3.978}
+#| fig.cap: 'Proportion of G2M-phase EdU⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM. \*\*\*, P < 0.001; \*\*, P < 0.01; \*, P < 0.05(adjusted P-values by Bonferroni correction). Statistical significance was assessed with linear mixed-effects model, including experiment as a random effect and time as a categorical predictor'
+
+scale <- 1
+
+p <- data_long %>%
+  filter(grepl("RO_G2M", Table), !is.na(Proportion)) %>%
+  mutate(
+    Time = gsub("Control", "Ctrl", Time),
+    Time = gsub(" hour[s]?", "h", Time),
+    Time = gsub("min", "m", Time),
+    #Time = gsub(" ", "", Time),
+    Time = fct_inorder(Time)
+  ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = expression("G2M EdU"^"+"~"beta cells (%) FC"),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale), clip = "off") +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+  labels = function(x) gsub(
+    "(Ctrl|\\+RO|-RO)\\s*", "\\1\n", x
+  )
+) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 1.92,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 40, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text3),
+    axis.text.y = element_text(size = ax_text3),
+    axis.title.x = element_text(size = tit_text3, margin = margin(t = mar3)),
+    axis.title.y = element_text(size = tit_text3, margin = margin(r = mar1b3))
+  )
+
+start <- 115/scale
+tr <- 0
+byp <- 10/scale
+
+p <- add_starm(1, c(4:6), start - tr, '**', scal = scale); tr <-  tr + byp
+p <- add_starm(1, c(2:3), start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp*0.5
+p <- add_starm(4, 6, start - tr, '***', scal = scale); tr <-  tr + byp*0.5
+p <- add_starm(2, c(3:4), start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp
+p <- add_starm(2, c(5:6), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(3, c(5:6), start - tr, '**', scal = scale); tr <-  tr + byp
+p <- add_starm(3, 4, start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp*0.5
+p <- add_starm(4, 5, start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp*0.5
+p <- add_starm(5, 6, start - tr, '<sup>n.s.</sup>', scal = scale)
+p
+
+if (!file.exists("gitignore/figures/fig_21.pdf")) {
+  ggsave("gitignore/figures/fig_21.pdf", plot = p, width = figw5, height = figh5, units = "in")
+  ggsave("gitignore/figures/fig_21.svg", plot = p, width = figw5, height = figh5, units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("RO_G2M", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of G2M-phase EdU⁺ beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+
+# RO DIVIDED
+
+## Show Data
+
+```{r, fig.height=4.755, fig.width=6.423}
+#| fig.cap: 'Mean proportion of divided β cells (% by flow cytometry) at different time points after IVT mRNA transfection and across individual experiments'
+
+data_long %>% filter(grepl('RO_DIVIDED', Table)) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion, group = Experiment, color = Experiment)
+    ) +
+  geom_line() +
+  scale_y_continuous(
+    name = "Divided β cells (%) FC"
+  ) +
+  scale_x_discrete(name = "Time after IVT mRNA transfection") 
+```
+
+
+$\Rightarrow$ Variances appear to differ
+
+## Models
+
+### Choose model
+
+AIC/BIC
+
+```{r}
+model_NR <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('RO_DIVIDED', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_RI <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('RO_DIVIDED', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE
+)
+
+model_NR_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time,
+  data = data_long %>%
+    filter(
+      grepl('RO_DIVIDED', Table),
+      !is.na(Proportion)
+    ) %>%
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+model_RI_difvar <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('RO_DIVIDED', Table),
+      !is.na(Proportion)
+    ) %>% 
+    mutate(Time = factor(Time)),
+  REML = FALSE,
+  dispformula = ~ 0 + Time
+)
+
+kableExtra::kable(AIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+kableExtra::kable(BIC(model_NR, model_RI, model_NR_difvar, model_RI_difvar))
+```
+
+Diagnostics
+
+```{r, fig.height=6, fig.width=7}
+#| fig.cap: 'Diagnostic plots from DHARMa simulated residuals for models with and without group-specific residual variance. Top: random-intercept model with a single (global) residual variance. Bottom: random-intercept model allowing group-specific residual variance. Left: quantile–quantile plot comparing simulated residuals to the expected distribution. Right: residuals plotted against predicted values; black lines show the median (0.5) and lower/upper quartiles (0.25, 0.75) with shaded 95% simulation envelopes. Deviations from expected values suggest potential model misspecification'
+
+set.seed(709)
+
+res1 <- simulateResiduals(model_RI, n = 500)
+res2 <- simulateResiduals(model_RI_difvar, n = 500)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plotQQunif(res1, main = "Global variance")
+plotResiduals(res1, main = "")
+
+plotQQunif(res2, main = "Group-specific variance")
+plotResiduals(res2, main = "")
+par(op)
+```
+
+$\Rightarrow$ Allowance of group-specific residual variance notably improves AIC and BIC and will be thus retained. Although diagnostics shows a slight breaking of assumptions, allowance of the group-specific residual variance did not improve it noticeably
+
+### Fit final model
+
+```{r}
+model_final <- glmmTMB::glmmTMB(
+  Proportion ~ Time + (1 | Experiment),
+  data = data_long %>%
+    filter(
+      grepl('RO_DIVIDED', Table),
+      !is.na(Proportion)
+    ),
+  REML = TRUE,
+  dispformula = ~ 0 + Time
+)
+```
+
+### Results
+
+```{r}
+kableExtra::kable(car::Anova(model_final))
+summary(model_final)
+
+contrast <- con_tab(model_final)
+
+kableExtra::kable(
+  contrast,
+  caption = "Estimated pairwise differences in the proportion of divided β cells (%; flow cytometry), obtained from a linear mixed-effects model with experiment as a random intercept, time as a categorical predictor, and with allowance of group-specific residual variance. Columns: `contrast` (time points compared), `estimate` (mean difference in %), `CI` (Bonferroni-adjusted 95% confidence interval [lower, upper]), `SE` (standard error), `df` (degrees of freedom), `t.ratio` (test statistic), `p.value` (Bonferroni-adjusted p-value), and `stars` (significance code)"
+)
+```
+
+### Visualisation
+
+```{r, fig.height=3.896, fig.width=3.978}
+#| fig.cap: 'Proportion of divided beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM. \*\*\*, P < 0.001; \*\*, P < 0.01; \*, P < 0.05(adjusted P-values by Bonferroni correction). Statistical significance was assessed with linear mixed-effects model, including experiment as a random effect, time as a categorical predictor, and with allowance of group-specific residual variance'
+
+scale <- 10/4
+
+p <- data_long %>%
+  filter(grepl("RO_DIVIDED", Table), !is.na(Proportion)) %>%
+  mutate(
+    Time = gsub("Control", "Ctrl", Time),
+    Time = gsub(" hour[s]?", "h", Time),
+    Time = gsub("min", "m", Time),
+    #Time = gsub(" ", "", Time),
+    Time = fct_inorder(Time)
+  ) %>% 
+  ggplot(
+    aes(x = Time, y = Proportion)
+  ) +
+  stat_summary(
+    fun = 'mean',
+    geom = 'col',
+    fill = 'grey80', color = 'black',
+    width = 0.7,
+    alpha = 0.2
+  ) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.324) +
+  scale_y_continuous(
+    breaks = seq(0, 100/scale, 20/scale),
+    name = "Divided  beta cells (%) FC",
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  coord_cartesian(ylim = c(0, 100/scale), clip = "off") +
+  scale_x_discrete(name = "Time after IVT mRNA transfection",
+  labels = function(x) gsub(
+    "(Ctrl|\\+RO|-RO)\\s*", "\\1\n", x
+  )
+) +
+  geom_beeswarm(
+    cex = 2,
+    fill = 'grey64',
+    size = 1.92,
+    shape = 21,
+    color = rgb(0.2, 0.2, 0.2, 0.9),
+    stroke = 0.5
+  ) +
+  theme_classic() +
+  theme(
+    plot.margin = margin(t = 40, r = 1, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text3),
+    axis.text.y = element_text(size = ax_text3),
+    axis.title.x = element_text(size = tit_text3, margin = margin(t = mar3)),
+    axis.title.y = element_text(size = tit_text3, margin = margin(r = 6))
+  )
+
+start <- 115/scale
+tr <- 0
+byp <- 12/scale
+
+p <- add_starm(6, c(1:5), start - tr, '*', scal = scale); tr <-  tr + byp
+p <- add_starm(5, c(1:4), start - tr, '**', scal = scale); tr <-  tr + byp
+p <- add_starm(4, c(1:2), start - tr, '***', scal = scale); tr <-  tr + byp
+p <- add_starm(4, 3, start - tr, '<sup>n.s.</sup>', scal = scale); tr <-  tr + byp
+p <- add_starm(3, c(1:2), start - tr, '**', scal = scale); tr <-  tr + byp*2
+p <- add_starm(1, 2, start - tr, '<sup>n.s.</sup>', scal = scale)
+
+p
+
+if (!file.exists("gitignore/figures/fig_22.pdf")) {
+  ggsave(
+    "gitignore/figures/fig_22.pdf", 
+    plot = p, 
+    width = figw5, 
+    height = figh5, 
+    units = "in")
+  
+  ggsave(
+    "gitignore/figures/fig_22.svg", 
+    plot = p,
+    width = figw5, 
+    height = figh5,
+    units = "in")
+  }
+```
+
+### Summary statistics over timpoints
+
+```{r}
+kableExtra::kable(
+  data_long %>%
+    dplyr::filter(grepl("RO_DIVIDED", Table)) %>%
+    tidyr::drop_na(Proportion) %>%
+    dplyr::group_by(Time) %>%
+    dplyr::summarise(
+      mean = mean(Proportion),
+      median = quantile(Proportion, probs = 0.5),
+      SD = sd(Proportion),
+      SEM = sem(Proportion)
+    ),
+  caption = "Summary statistics for the proportion of divided  beta cells (% by flow cytometry) at different time points after IVT mRNA transfection. Mean, median, SD, and SEM are shown; SD, standard deviation; SEM, standard error of the mean"
+)
+```
+
+
+# RO Cell cycle occupation by FC
+
+## Create relavant datasets
+
+```{r}
+## to get means
+data_occup <- data_long %>% 
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>% 
+  filter(
+    grepl('RO_Cell_cycle_occupation', Table)
+  ) %>%
+  tidyr::drop_na(Proportion) %>% 
+  rename(
+    Population = `Name.of.population`
+  ) %>% 
+  dplyr::select(Time, Population, Proportion) %>% 
+  pivot_wider(
+    names_from = Population, 
+    values_from = Proportion,
+    values_fn = mean
+  ) %>% 
+  mutate(Other = 100 - `S EdU+` - `G0G1 EdU-` -  `G2M EdU+` - `DIVIDED` - `2nd S`)
+
+data_occup
+
+## to get SEM
+sem_df <- data_long %>%
+  mutate(
+    Time = gsub(" hour[s]?", "h", gsub("Control", "Ctrl", Time))
+  ) %>% 
+  filter(
+    grepl('RO_Cell_cycle_occupation', Table)
+  ) %>%
+  tidyr::drop_na(Proportion) %>%
+  rename(Population = `Name.of.population`) %>%
+  group_by(Time, Population) %>%
+  summarise(sem = sd(Proportion)/sqrt(n()), .groups = "drop") %>%
+  left_join(data_occup, by = "Time") %>%
+  mutate(
+    xmid = case_when(
+      Population == "G0G1 EdU-" ~ `G0G1 EdU-`,
+      Population == "S EdU+" ~ `G0G1 EdU-` + `S EdU+`,
+      Population == "G2M EdU+" ~ `G0G1 EdU-` + `S EdU+` + `G2M EdU+`,
+      Population == "DIVIDED" ~ `G0G1 EdU-` + `S EdU+` + `G2M EdU+` + `DIVIDED`,
+      Population == "2nd S" ~ `G0G1 EdU-` + `S EdU+` + `G2M EdU+` + `DIVIDED` + 
+        `2nd S`
+  )
+)
+
+kableExtra::kable(sem_df %>% select(Time, Population, sem))
+```
+
+## Plot
+
+```{r, fig.width=3.372, fig.height=4.492}
+#| fig.cap: 'Proportion of beta cells in G0G1 EdU⁻, S EdU⁺, G2M EdU⁺, Divided and 2nd S phase (% by flow cytometry) at different time points after IVT mRNA transfection. Bars show means ± SEM (for individual phases; “Other” calculated as 100% − G0G1 EdU⁻ − S EdU⁺ − G2M EdU⁺ − Divided − 2nd S)'
+
+
+p <- data_occup %>%
+  tidyr::pivot_longer(
+    cols = c(`G0G1 EdU-`, `S EdU+`, `G2M EdU+`, `DIVIDED`, `2nd S`, Other),
+    names_to = "Phase",
+    values_to = "Percent"
+  ) %>%
+  dplyr::mutate(
+    Phase = factor(
+      Phase,
+      levels = c("Other", "2nd S", "DIVIDED", "G2M EdU+", "S EdU+", "G0G1 EdU-")
+    )
+  ) %>%
+   dplyr::mutate(Time = factor(
+    Time,
+    levels = c(
+      "+RO 37h",
+      "-RO +30min",
+      "-RO +1h",
+      "-RO +2h",
+      "-RO +5h",
+      "Ctrl 37h"
+    )
+  )) %>% 
+  ggplot(
+    aes(
+      y = Time,
+      x = Percent,
+      fill = Phase
+    )
+  ) +
+  geom_col(width = 0.7) +
+  scale_fill_manual(
+    values = c(
+      "G0G1 EdU-" = "springgreen4",
+      "S EdU+" = "#EEBBFC",
+      "G2M EdU+" = "darkorange1",
+      "DIVIDED" = "#6DF1FC",
+      "2nd S" = "gold2",
+      "Other" = "grey70"
+    ),
+    breaks = c("G0G1 EdU-", "S EdU+", "G2M EdU+", "DIVIDED", "2nd S", "Other"),
+    labels = c(
+  "G0G1 EdU-" = expression(G0G1~EdU^"-"),
+  "S EdU+"    = expression(S~EdU^"+"),
+  "G2M EdU+"  = expression(G2M~EdU^"+"),
+  "DIVIDED"   = "Divided",
+  "2nd S"     = "2nd S",
+  "Other"     = "Other"
+),
+    name = NULL
+  ) +
+  labs(
+    x = "Cell cycle occupation (%)",
+    y = "Time after IVT mRNA transfection"
+  ) +
+  scale_x_continuous(
+    limits = c(0, 104),
+    expand = expansion(mult = c(0, 0), add = c(0, 0))
+  ) +
+  scale_y_discrete(
+    labels = function(x) {
+      gsub(
+        "(Ctrl|\\+RO|-RO)\\s*", "\\1\n", x
+      )
+    }
+  ) +
+  theme_classic() +
+  theme(
+    axis.line.y = element_line(color = "black"),
+    axis.line.x = element_line(color = "black"),
+    legend.position = "bottom",
+    plot.margin = margin(t = 1, r = 13, b = 1, l = 1),
+    axis.text.x = element_text(size = ax_text4),
+    axis.text.y = element_text(size = ax_text4),
+    axis.title.x = element_text(size = tit_text4),
+    axis.title.y = element_text(size = tit_text4),
+    legend.text = element_text(size = leg_text4),
+    legend.key.size = unit(0.85, "lines")
+  ) +
+  guides(
+    fill = guide_legend(nrow = 3)
+  ) +
+  geom_errorbarh(
+    data = sem_df,
+    aes(
+      y = Time,
+      xmin = xmid - sem,
+      xmax = xmid + sem
+    ),
+    height = 0.28,
+    inherit.aes = FALSE,
+    linewidth = 0.4,
+    color = "black"
+  ) +
+  scale_color_manual(
+    guide = "none"
+  )
+
+p
+
+if (!file.exists("gitignore/figures/fig_23.pdf")) {
+  ggsave(
+    "gitignore/figures/fig_23.pdf",
+    plot = p,
+    width = figw2,
+    height = figh2,
+    units = "in"
+  )
+
+  ggsave(
+    "gitignore/figures/fig_23.svg",
+    plot = p,
+    width = figw2,
+    height = figh2,
+    units = "in"
+  )
+}
+```
+
+
+# Reproducibility
+
+```{r}
+sessionInfo()
+```
