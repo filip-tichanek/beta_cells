@@ -1,0 +1,54 @@
+{
+  "title": "Statistical analysis report and R code for: Cell cycle dynamics of mRNA induced β-cell proliferation",
+  "upload_type": "software",
+  "description": "<p>This repository contains the R/Quarto statistical analysis code and rendered statistical report accompanying the manuscript <em>Cell cycle dynamics of mRNA induced β-cell proliferation</em>.</p><p>The manuscript investigates cell cycle kinetics and phase durations in primary pancreatic β-cells after induction of proliferation using synthetic in vitro transcribed mRNAs encoding Cyclin D1 and CDK4. The repository includes code for data processing, visualization, linear mixed-effects modelling, model diagnostics, omnibus tests, pairwise comparisons, and generation of the statistical report.</p><p>No raw or individual-level data are included in this repository; the data used for the analyses are provided as supplementary/source data with the manuscript.</p><p>Original GitHub repository: https://github.com/filip-tichanek/beta_cells. Rendered statistical report: https://filip-tichanek.github.io/beta_cells/.</p>",
+  "creators": [
+    {
+      "name": "Bittenglova, Katerina",
+      "affiliation": "Department of Diabetes, Institute for Clinical and Experimental Medicine, 140 21 Prague, Czech Republic; First Faculty of Medicine, Charles University, 121 08 Prague, Czech Republic"
+    },
+    {
+      "name": "Zacharovova, Klara",
+      "affiliation": "Laboratory of Pancreatic Islets, Center of Experimental Medicine, Institute for Clinical and Experimental Medicine, 140 21 Prague, Czech Republic"
+    },
+    {
+      "name": "Tichanek, Filip",
+      "affiliation": "Department of Data Science, Institute for Clinical and Experimental Medicine, 140 21 Prague, Czech Republic"
+    },
+    {
+      "name": "Leontovyc, Ivan",
+      "affiliation": "Laboratory of Pancreatic Islets, Center of Experimental Medicine, Institute for Clinical and Experimental Medicine, 140 21 Prague, Czech Republic"
+    },
+    {
+      "name": "Girman, Peter",
+      "affiliation": "Department of Diabetes, Institute for Clinical and Experimental Medicine, 140 21 Prague, Czech Republic"
+    },
+    {
+      "name": "Kriz, Jan",
+      "affiliation": "Department of Diabetes, Institute for Clinical and Experimental Medicine, 140 21 Prague, Czech Republic; First Faculty of Medicine, Charles University, 121 08 Prague, Czech Republic"
+    },
+    {
+      "name": "Saudek, Frantisek",
+      "affiliation": "Department of Diabetes, Institute for Clinical and Experimental Medicine, 140 21 Prague, Czech Republic; First Faculty of Medicine, Charles University, 121 08 Prague, Czech Republic; Laboratory of Pancreatic Islets, Center of Experimental Medicine, Institute for Clinical and Experimental Medicine, 140 21 Prague, Czech Republic"
+    },
+    {
+      "name": "Koblas, Tomas",
+      "affiliation": "Laboratory of Pancreatic Islets, Center of Experimental Medicine, Institute for Clinical and Experimental Medicine, 140 21 Prague, Czech Republic; Department of Biochemistry, Faculty of Science, Charles University, 128 00 Prague, Czech Republic"
+    }
+  ],
+  "access_right": "open",
+  "license": "mit",
+  "keywords": [
+    "Beta cells",
+    "proliferation",
+    "cell cycle",
+    "quiescence",
+    "synthetic modified mRNA",
+    "Cyclin D1",
+    "CDK4",
+    "EdU",
+    "flow cytometry",
+    "diabetes"
+  ],
+  "version": "1.0.0"
+}
