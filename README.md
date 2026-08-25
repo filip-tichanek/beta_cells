@@ -30,6 +30,12 @@ Original [GitHub repository](https://github.com/filip-tichanek/beta_cells/): htt
 
 Statistical **report** can be found [here](https://filip-tichanek.github.io/beta_cells/)
 
+# Archived version
+
+The manuscript-submission version of this repository is archived on Zenodo:
+
+- Version DOI: https://doi.org/10.5281/zenodo.22095340
+- Concept DOI: https://doi.org/10.5281/zenodo.22095339
 
 ----------------------------------------------------------------------------------------------------
 
