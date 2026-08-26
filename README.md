@@ -17,11 +17,11 @@ Katerina Bittenglova<sup>1,2</sup>, Klara Zacharovova<sup>3</sup>, Filip Tichane
 
 ---------------------------------------------------------------------------------------------------
 
-This is a statistical report for the manuscript titled ***Cell cycle dynamics of mRNA induced β-cell proliferation*** (currently in preparation / under review).
+This is a statistical report, code and data for the manuscript titled ***Cell cycle dynamics of synthetic mRNA induced β-cell proliferation*** (currently in preparation / under review).
 
-When using this code or data, please cite the manuscript (update once published):
+When using this data, code or statistical report, please cite the manuscript and the archived Zenodo version of this repository (update once published):
 
-> Bittenglova K., Zacharovova K., Tichanek F., Leontovyc I., Girman P., Kriz J., Saudek F., Koblas T. Cell cycle dynamics of mRNA induced β-cell proliferation. *[Journal Name]* (Year). [DOI]
+> Bittenglova K., Zacharovova K., Tichanek F., Leontovyc I., Girman P., Kriz J., Saudek F., Koblas T. Cell cycle dynamics of synthetic mRNA induced β-cell proliferation. *[Journal Name]* (Year). [DOI]
 
 
 ---------------------------------------------------------------------------------------------------
