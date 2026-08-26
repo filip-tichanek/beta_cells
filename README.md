@@ -32,9 +32,7 @@ Statistical **report** can be found [here](https://filip-tichanek.github.io/beta
 
 **Archived version**
 
-The manuscript-submission version of this repository is archived on Zenodo:
-
-- Concept DOI: https://doi.org/10.5281/zenodo.22095339
+The manuscript-submission version of this repository is archived on [Zenodo](https://doi.org/10.5281/zenodo.22095339) (Concept DOI: https://doi.org/10.5281/zenodo.22095339)
 
 ----------------------------------------------------------------------------------------------------
 
