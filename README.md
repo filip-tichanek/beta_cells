@@ -17,7 +17,7 @@ Katerina Bittenglova<sup>1,2</sup>, Klara Zacharovova<sup>3</sup>, Filip Tichane
 
 ---------------------------------------------------------------------------------------------------
 
-This is a statistical report, code and data for the manuscript titled ***Cell cycle dynamics of synthetic mRNA induced β-cell proliferation*** (currently in preparation / under review).
+This is a statistical report, code and data for the manuscript titled ***Cell cycle dynamics of synthetic mRNA-induced β-cell proliferation*** (currently in preparation / under review).
 
 When using this data, code or statistical report, please cite the manuscript and the archived Zenodo version of this repository (update once published):
 
