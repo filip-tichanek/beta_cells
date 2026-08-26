@@ -1,7 +1,7 @@
 **Authors and affiliations**
 
 <div style="font-size: larger;">
-Katerina Bittenglova<sup>1,2,&#42;</sup>, Klara Zacharovova<sup>3</sup>, Filip Tichanek<sup>4</sup>, Ivan Leontovyc<sup>3</sup>, Peter Girman<sup>1</sup>, Jan Kriz<sup>1,2</sup>, Frantisek Saudek<sup>1,2,3</sup>, and Tomas Koblas<sup>3,5,6,7,&#42;</sup>
+Katerina Bittenglova<sup>1,2</sup>, Klara Zacharovova<sup>3</sup>, Filip Tichanek<sup>4</sup>, Ivan Leontovyc<sup>3</sup>, Peter Girman<sup>1</sup>, Jan Kriz<sup>1,2</sup>, Frantisek Saudek<sup>1,2,3</sup>, and Tomas Koblas<sup>2,3,5,6,7,&#42;</sup>
 </div>
 
 <br>
@@ -13,15 +13,15 @@ Katerina Bittenglova<sup>1,2,&#42;</sup>, Klara Zacharovova<sup>3</sup>, Filip T
 <sup>5</sup> Department of Biochemistry, Faculty of Science, Charles University, Prague, Czech Republic     
 <sup>6</sup> Lead contact     
 <sup>7</sup> Senior author     
-<sup>&#42;</sup> Correspondence: katerina.bittenglova@ikem.cz, tomas.koblas@ikem.cz
+<sup>&#42;</sup> Correspondence: tomas.koblas@ikem.cz
 
 ---------------------------------------------------------------------------------------------------
 
-This is a statistical report for the manuscript titled ***Heterogeneous cell cycle dynamics of rat pancreatic β-cells revealed by induced proliferation*** (currently in preparation / under review).
+This is a statistical report for the manuscript titled ***Cell cycle dynamics of mRNA induced β-cell proliferation*** (currently in preparation / under review).
 
 When using this code or data, please cite the manuscript (update once published):
 
-> Bittenglova K., Zacharovova K., Tichanek F., Leontovyc I., Girman P., Kriz J., Saudek F., Koblas T. Heterogeneous cell cycle dynamics of rat pancreatic β-cells revealed by induced proliferation. *[Journal Name]* (Year). [DOI]
+> Bittenglova K., Zacharovova K., Tichanek F., Leontovyc I., Girman P., Kriz J., Saudek F., Koblas T. Cell cycle dynamics of mRNA induced β-cell proliferation. *[Journal Name]* (Year). [DOI]
 
 
 ---------------------------------------------------------------------------------------------------
