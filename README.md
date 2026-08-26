@@ -30,7 +30,7 @@ Original [GitHub repository](https://github.com/filip-tichanek/beta_cells/): htt
 
 Statistical **report** can be found [here](https://filip-tichanek.github.io/beta_cells/)
 
-# Archived version
+**Archived version**
 
 The manuscript-submission version of this repository is archived on Zenodo:
 
@@ -38,7 +38,7 @@ The manuscript-submission version of this repository is archived on Zenodo:
 
 ----------------------------------------------------------------------------------------------------
 
-# General analytical workflow
+**General analytical workflow**
 
 For each analyzed beta cell population, the analysis follows this workflow:
 
