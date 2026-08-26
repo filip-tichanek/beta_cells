@@ -1,5 +1,5 @@
 ---
-title: "Cell cycle dynamics of mRNA induced β-cell proliferation"
+title: "Cell cycle dynamics of synthetic mRNA induced β-cell proliferation"
 subtitle: "Statistical report"
 format: 
   html:  
